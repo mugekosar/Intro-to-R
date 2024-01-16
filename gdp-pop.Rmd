@@ -1,0 +1,620 @@
+---
+title: "GDP Population Trends & Electric Source Distribution"
+author: "Muge Kosar"
+date: "28 April 2022"
+output:
+  html_document:
+    theme: readable
+    df_print: paged
+    highlight: tango
+    toc: yes
+    number_sections: yes
+    toc_float: yes
+---
+
+<style>
+#TOC {
+  color: #708090;
+  border-color: #708090;
+}
+</style>
+---
+# Introduction
+
+This report analyzes the energy dataset which includes variables on electricity sources, and energy production consumption including GDP-population variables. The various methods are applied to analyze:
+- Relationship between the population and some electricity sources
+- GDP-Population trends
+- Percentage Change in GDP, GDP per capita and Population
+- Electricity source distributions
+- Energy distribution in 1990 and 2018 for Japan and Germany
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(dplyr)
+library(readr)
+library(expss)
+library(pastecs)
+library(haven)
+library(readxl)
+library(ggplot2)
+library(writexl)
+library(scales) 
+library(svglite) 
+library(modelsummary)
+
+energy_data <- read_csv("/Users/mugekosar/Downloads/energy-data.csv")
+gdp_pop <- read_excel("/Users/mugekosar/Downloads/gdp-pop.xlsx")
+# Merging energy data and gdp_pop data.
+merged_data<-left_join(energy_data,gdp_pop,by="code")
+```
+
+# Data
+
+The energy and GDP-Population datasets are collected from different sources. The energy datasets are collected from the Our World in Data website which provides information on large global problems such as poverty, disease, hunger, climate change, war, existential risks, and inequality and GDP-Population datasets are collected from World Bank website. Energy datasets includes data on energy consumption (primary energy, per capita, and growth rates), energy mix, electricity mix and other relevant metrics. 
+The energy dataset has 17,470 observations and 123 variables and the dataset from World 
+
+
+```{r }
+# Filter on needed variables.
+data<-select(merged_data,country,year,coal_production,electricity_generation,biofuel_electricity,coal_electricity,fossil_electricity,gas_electricity,hydro_electricity,nuclear_electricity,oil_electricity,renewables_electricity,oil_production,population,gdp,solar_electricity,wind_electricity,energy_per_gdp,energy_per_capita,fossil_share_elec,gas_share_elec,gas_production,low_carbon_share_elec)
+# Filter on year.
+data<-filter(data,data$year>=1990)
+# Filter on countries. 
+data<-
+  data %>%
+  filter(country=="Egypt" |
+         country=="Saudi Arabia" |
+         country=="United Kingdom" |
+         country=="France" |
+         country=="Germany" |
+         country=="United States" |
+         country=="Japan" |
+         country=="India" |
+         country=="Algeria" |
+         country=="Belgium" |
+         country=="Finland" |
+         country=="Hungary" |
+         country=="Italy" |
+         country=="Poland" |
+         country=="Spain" |
+         country=="Turkey")
+
+#Replace NA values with 0
+data[is.na(data)]=0
+
+```
+
+# Summary statistics
+
+```{r, echo=FALSE}
+#Filtering zero values
+new_data<-
+ data %>%
+  filter(gdp>0 &
+         population>0)
+
+# Removing scientific notation
+options(scipen = 100) 
+summary(new_data) #getting summary of dataset 
+
+# Checking the min and max values for the report.
+new_data<-new_data[order(new_data$gdp),] #ascending order
+new_data<-new_data[order(new_data$population),]  #ascending order
+new_data<-new_data[order(new_data$electricity_generation),]  #ascending order
+
+```
+
+# Regression Analysis
+
+To check if the result is statistically significant, I used the probability value which means the test is statistically significant if probability value is lower than 0.05. Then, I interpreted the results according to their coefficients. It means a positive sign indicates that as the independent variable increases, the dependent variable also increases while a negative sign indicates that as the independent variable increases, the dependent variable decreases.
+
+```{r, echo=FALSE}
+# Creating four different regression
+my_regs <- list(
+  "Population on Electricity Generation"     = lm(population~electricity_generation, data=data),
+  "Population on Coal Production"     = lm(population~coal_production, data=data),
+  "Population on Coal Production with Control"     = lm(population~coal_production+gas_production, data=data),
+  "GDP on Renewables Electricity"     = lm(gdp~renewables_electricity, data=data)  
+)
+
+# Outputting summary info of regressions to viewer
+modelsummary(my_regs, stars = c('*' = .1, '**' = .05, '***' = .01))
+
+
+```
+
+# GDP vs Pop Trends
+
+Based on Figures below: 
+
+United States has the highest GDP and highest GDP per capita while Egypt has the lowest GDP. Although India has the second-highest GDP, it has the lowest GDP per capita. 
+The highest population is in India while the lowest population is in Saudi Arabia.
+
+## Line chart for GDP per capita
+
+```{r, echo=FALSE}
+# Filter data on countries (Selected countries for analysis)
+plot_data<-   
+  data %>%
+  filter(country=="Egypt" |
+           country=="France" | 
+           country=="Germany" | 
+           country== "India" | 
+           country=="Japan" | 
+           country=="Saudi Arabia" | 
+           country=="United Kingdom" | 
+           country=="United States")
+
+## Plotting line chart for GDP per capita
+
+# Creating dataset for gdp per capita
+gdp_cap_by_country <- plot_data %>% group_by(year, country) %>% 
+  summarise(gdp_per_cap = gdp/population) 
+
+# Line chart for GDP per capita
+gdp_cap_by_country %>% ggplot(aes(x = year, y = gdp_per_cap, group=country, color =country)) + 
+  geom_line(size=1) +
+  coord_cartesian(ylim = c(0, 65000))+ 
+  labs(title = "GDP per capita by Country",y="GDP per capita",x="Year")+
+  theme_bw()+
+  theme(plot.title = element_text(hjust = 0.5))+
+  theme(
+    axis.title.x = element_text(family="serif",color = "black", size = 10, face = "bold"),
+    axis.title.y = element_text(family="serif",color = "black", size = 10, face = "bold"),
+    plot.title = element_text(family="serif",color="black", size=14, face="bold"),
+    text=element_text(family="serif"))+
+  theme(legend.text = element_text(family="serif",size = 10))+
+  theme(legend.title = element_text(family="serif",face = "bold",size=12))+
+  theme(
+    legend.position = c(1, .1),
+    legend.justification = c("right", "bottom"),
+    legend.box.just = "right",
+    legend.margin = margin(6, 6, 6, 6),
+    legend.background = element_rect(fill = "white", colour = "black"))
+
+```
+
+## Line chart for GDP 
+
+```{r, echo=FALSE}
+# Line chart for GDP    
+
+# Creating dataset for GDP
+gdp_by_country<-plot_data %>% group_by(year, country) %>% 
+  summarise(gdp = gdp) 
+
+gdp_by_country[,'gdp']=round(gdp_by_country[,'gdp'],2) #arranging values as two decimal
+options(scipen=999) #Arranging scientific notation
+
+
+# Line chart for GDP    
+gdp_by_country %>% ggplot(aes(x = year, y = gdp, group=country, color = country)) + 
+  geom_line(size=1) +
+  scale_y_continuous(labels = label_number(suffix = " M", scale = 1/10000000000000))+
+  labs(title = "GDP by Country",y="GDP",x="Year")+
+  theme_bw()+
+  theme(plot.title = element_text(hjust = 0.5))+
+  theme(
+      axis.title.x = element_text(family="serif",color = "black", size = 10, face = "bold"),
+      axis.title.y = element_text(family="serif",color = "black", size = 10, face = "bold"),
+      plot.title = element_text(family="serif",color="black", size=14, face="bold"),
+      text=element_text(family="serif"))+
+  theme(legend.text = element_text(family="serif",size = 10))+
+  theme(legend.title = element_text(family="serif",face = "bold",size=12))+
+  theme(
+    legend.position = c(1, .4),
+    legend.justification = c("right", "bottom"),
+    legend.box.just = "right",
+    legend.margin = margin(6, 6, 6, 6),
+    legend.background = element_rect(fill = "white", colour = "black"))
+
+```
+
+## Line chart for Population
+```{r, echo=FALSE}
+## Line chart for Population
+
+# Creating dataset for Population
+pop_by_country<-plot_data %>% group_by(year, country) %>% 
+  summarise(population = population) 
+
+# Line chart for Population
+pop_by_country %>% ggplot(aes(x = year, y = population, color = country)) + 
+  geom_line(size=1) + 
+  scale_y_continuous(labels = label_number(suffix = " M", scale = 1/1000000))+
+  labs(title = "Population by Country",y="GDP",x="Year")+
+  theme_bw()+
+  theme(plot.title = element_text(hjust = 0.5))+
+  theme(
+    axis.title.x = element_text(family="serif",color = "black", size = 10, face = "bold"),
+    axis.title.y = element_text(family="serif",color = "black", size = 10, face = "bold"),
+    plot.title = element_text(family="serif",color="black", size=14, face="bold"),
+    text=element_text(family="serif"))+
+  theme(legend.text = element_text(family="serif",size = 10))+
+  theme(legend.title = element_text(family="serif",face = "bold",size=12))+
+  theme(
+    legend.position = c(1,0.9),
+    legend.justification = c("right", "top"),
+    legend.box.just = "right",
+    legend.margin = margin(6, 6, 6, 6),
+    legend.background = element_rect(fill = "transparent",color=1))
+    
+```
+
+
+# Percentage Changes in GDP ,Population and GDP per capita
+
+Based on Figures below:
+
+The highest percentage increase in GDP is in Saudi Arabia which is 171.05% while the lowest percentage change in GDP is in Japan which is 4.45%.
+Population percentage change figure shows that there is no population increase in Germany which is -0.45% and Japan has little population increase which is 0.29%.
+According to the figure for GDP per capita percentage change, the highest percentage increase in GDP per capita is in India while the lowest percentage increase in GDP per capita is in the United Kingdom.
+
+## GDP % increase
+
+```{r, echo=FALSE}
+### Third Analysis: % Changes in GDP ,Population and GDP per capita
+
+# Datasets for durations 2000-2005 and 2010-2015
+gdp_2000_2005<-filter(plot_data,plot_data$year>=2000 & plot_data$year<=2005)
+gdp_2010_2015<-filter(plot_data,plot_data$year>=2010 & plot_data$year<=2015)
+
+
+## GDP % increase
+
+# Finding GDP difference between these two durations.
+gdp1<-aggregate(gdp_2000_2005$gdp, list(gdp_2000_2005$country),FUN = mean)
+gdp1<-rename(gdp1,Country=Group.1,GDP=x) #Renaming variables
+gdp2<-aggregate(gdp_2010_2015$gdp, list(gdp_2010_2015$country),FUN = mean) 
+gdp2<-rename(gdp2,Country=Group.1,GDP=x) #Renaming variables
+comparison<-left_join(gdp1,gdp2,by="Country")
+comparison<-rename(comparison,GDP.2000.2005=GDP.x,GDP.2010.2015=GDP.y) #Renaming variables
+
+comparison<- mutate(comparison,GDP_diff= ((GDP.2010.2015 - GDP.2000.2005)/ GDP.2000.2005 )*100)
+comparison<-comparison[order(comparison$GDP_diff),] #ascending order
+comparison[,'GDP_diff']=round(comparison[,'GDP_diff'],2) #arranging values as two decimal
+
+## Horizontal bar chart for GDP % change
+ggplot(comparison,aes(x=GDP_diff,y=Country))+
+  geom_col(fill="#69b3a2")+
+  geom_text(aes(label = paste0(GDP_diff, "%")),hjust=-0.01, color="#FF5733")+
+  labs(x="GDP % increase ",title = "GDP % Change")+
+  theme_bw()+
+  theme(plot.title = element_text(hjust = 0.5))+
+  theme(
+    axis.title.x = element_text(family="serif",color = "black", size = 14, face = "bold"),
+    axis.title.y = element_text(family="serif",color = "black", size = 14, face = "bold"),
+    plot.title = element_text(family="serif",color="black", size=18, face="bold"),
+    text=element_text(family="serif",size=14))+
+  theme(legend.text = element_text(family="serif",size = 10))+
+  theme(legend.title = element_text(family="serif",face = "bold",size=12))
+
+```
+
+## Population % increase
+
+```{r, echo=FALSE}
+## Population % increase
+
+# Finding Population difference between these two durations.
+pop1<-aggregate(gdp_2000_2005$population, list(gdp_2000_2005$country),FUN = mean) 
+pop1<-rename(pop1,Country=Group.1,Pop=x) #Renaming variables
+pop2<-aggregate(gdp_2010_2015$population, list(gdp_2010_2015$country),FUN = mean) 
+pop2<-rename(pop2,Country=Group.1,Pop=x) #Renaming variables
+comparison2<-left_join(pop1,pop2,by="Country")
+comparison2<-rename(comparison2,pop.2000.2005=Pop.x,pop.2010.2015=Pop.y) #Renaming variables
+
+comparison2<- mutate(comparison2,pop_diff= ((pop.2010.2015 - pop.2000.2005)/ pop.2000.2005 )*100)
+comparison2<-comparison2[order(comparison2$pop_diff),] #ascending order
+comparison2[,'pop_diff']=round(comparison2[,'pop_diff'],2) #arranging values as two decimal
+
+## Horizontal bar chart for population % change
+ggplot(comparison2,aes(x=pop_diff,y=Country))+
+  geom_col(fill="#69b3a2")+
+  geom_text(aes(label = paste0(pop_diff, "%")),hjust=-0.01,color="#FF5733")+
+  labs(x="Pop % increase ",title = "Population % Change")+
+  theme_bw()+
+  theme(plot.title = element_text(hjust = 0.5))+
+  theme(
+    axis.title.x = element_text(family="serif", color="black",size = 14, face = "bold"),
+    axis.title.y = element_text(family="serif", color="black",size = 14, face = "bold"),
+    plot.title = element_text(family="serif",color="black", size=16, face="bold"),
+    text=element_text(family="serif",size=14))+
+  theme(legend.text = element_text(family="serif",size = 10))+
+  theme(legend.title = element_text(family="serif",face = "bold",size=12))
+
+```
+
+## GDP per capita % increase
+
+```{r, echo=FALSE}
+## GDP per capita % increase
+
+# Finding GDP per capita difference between these two durations.
+
+# Adding gdp per capita into dataset
+gdp_2000_2005<-mutate(gdp_2000_2005,gdp_per_cap=gdp/population)
+gdp_2010_2015<-mutate(gdp_2010_2015,gdp_per_cap=gdp/population)
+
+gdp_per1<-aggregate(gdp_2000_2005$gdp_per_cap, list(gdp_2000_2005$country),FUN = mean)
+gdp_per1<-rename(gdp_per1,Country=Group.1,gdp.per.cap=x) #Renaming variables
+gdp_per2<-aggregate(gdp_2010_2015$gdp_per_cap, list(gdp_2010_2015$country),FUN = mean)
+gdp_per2<-rename(gdp_per2,Country=Group.1,gdp.per.cap=x) #Renaming variables
+comparison3<-left_join(gdp_per1,gdp_per2,by="Country")
+comparison3<-rename(comparison3,gdp.cap.2000.2005=gdp.per.cap.x,gdp.cap.2010.2015=gdp.per.cap.y) #Renaming variables
+
+comparison3<- mutate(comparison3,gdp_cap_diff= ((gdp.cap.2010.2015 - gdp.cap.2000.2005)/ gdp.cap.2000.2005 )*100)
+comparison3<-comparison3[order(comparison3$gdp_cap_diff),]  #ascending order
+comparison3[,'gdp_cap_diff']=round(comparison3[,'gdp_cap_diff'],2) #arranging values as two decimal
+
+## Horizontal bar chart for GDP per capita % change
+ggplot(comparison3,aes(x=gdp_cap_diff,y=Country))+
+  geom_col(fill="#69b3a2")+
+  geom_text(aes(label = paste0(gdp_cap_diff, "%")),hjust=-0.01, color="#FF5733")+
+  labs(x="GDP per capita % increase ",title = "GDP per capita % Change")+
+  theme_bw()+
+  theme(plot.title = element_text(hjust = 0.5))+
+  theme(
+    axis.title.x = element_text(family="serif", color="black",size = 14, face = "bold"),
+    axis.title.y = element_text(family="serif", color="black",size = 14, face = "bold"),
+    plot.title = element_text(family="serif",color="black", size=18, face="bold"),
+    text=element_text(family="serif",size=14))+
+  theme(legend.text = element_text(family="serif",size = 14))+
+  theme(legend.title = element_text(family="serif",face = "bold",size=12))
+
+
+
+```
+
+# Percentage share of electricty from total energy sources (Japan)
+
+According to the Japan electricity source distribution graph, after 2011 coal and gas share increased but nuclear energy decreased. 
+
+```{r, echo=FALSE}
+### Fourth Analysis: % share of electricty from total energy sources (Japan)
+
+# Getting dataset
+Japan_electricity <-filter(plot_data,plot_data$country=="Japan")
+Japan_electricity<-select(Japan_electricity,country,year,coal_electricity,oil_electricity,gas_electricity,hydro_electricity,nuclear_electricity,wind_electricity,solar_electricity) 
+
+# Getting the % share of electricty from total energy sources
+Japan_electricity$row_sum=rowSums(Japan_electricity[,c(3:9)])
+Japan_electricity<-mutate(Japan_electricity,coal_share=(coal_electricity/row_sum)*100)
+Japan_electricity<-mutate(Japan_electricity,oil_share=(oil_electricity/row_sum)*100)
+Japan_electricity<-mutate(Japan_electricity,gas_share=(gas_electricity/row_sum)*100)
+Japan_electricity<-mutate(Japan_electricity,hydro_share=(hydro_electricity/row_sum)*100)
+Japan_electricity<-mutate(Japan_electricity,nuclear_share=(nuclear_electricity/row_sum)*100)
+Japan_electricity<-mutate(Japan_electricity,wind_share=(wind_electricity/row_sum)*100)
+Japan_electricity<-mutate(Japan_electricity,solar_share=(solar_electricity/row_sum)*100)
+
+# Selecting only related variables
+plot_elect<-select(Japan_electricity,country,year,coal_share:solar_share)
+
+write_xlsx(plot_elect,"/Users/mugekosar/Downloads/old.xlsx") #Extracting dataset into Excel
+Japan <- read_excel("/Users/mugekosar/Downloads/Japan.xlsx")  #After arranging dataset in Excel, importing into R.
+
+## Line chart for Japan electricity source distributions over the years
+Japan %>% ggplot(aes(x = year, y = shares, color=source)) + 
+  geom_line(size=1)+
+  labs(title = "Japan electricity source distributions over the years",x="Year",y="Shares")+
+  theme_bw()+
+  theme(plot.title = element_text(hjust = 0.5))+
+  theme(
+    axis.title.x = element_text(family="serif",color = "black", size = 12, face = "bold"),
+    axis.title.y = element_text(family="serif",color = "black", size = 12, face = "bold"),
+    plot.title = element_text(family="serif",color="black", size=14, face="bold"),
+    text=element_text(family="serif"))+
+  theme(legend.text = element_text(family="serif",size = 10))+
+  theme(legend.title = element_text(family="serif",face = "bold",size=12))+
+  theme(legend.background = element_rect(colour = 1))  
+
+
+```
+
+# Plotting pie chart for energy distribution and comparing 1990 Vs 2018 (Japan)
+
+For Japan, in 1990 primary energy source is oil, and second-highest share in electricity distribution is nuclear energy with 22.59%. In 2018, the pie chart shows that Japan changed its strategy for energy sources and became more reliant on coal and gas.
+
+```{r, echo=FALSE}
+### Fifth Analysis: Plotting pie chart for energy distribution and comparing 1990 Vs 2018 (Japan)
+
+# Sorting values greater than zero
+pie<- Japan[,colSums(Japan!=0)>0]
+
+# Filtering only 1990 and 2018 years
+pie<- pie %>%
+  filter(year==1990 |
+           year==2018)
+
+# Creating two different datasets
+pie_1990<-filter(pie,pie$year==1990)
+pie_1990[,'shares']=round(pie_1990[,'shares'],2) #arranging values as two decimal
+pie_2018<-filter(pie,pie$year==2018)
+pie_2018[,'shares']=round(pie_2018[,'shares'],2) #arranging values as two decimal
+
+## Plotting pie chart for 1990
+
+# Filtering values greater than zero
+pie_1990<-filter(pie_1990,pie_1990$shares>0)
+pie_2018<-filter(pie_2018,pie_2018$shares>1) 
+```
+
+## Pie chart for 1990
+
+```{r, echo=FALSE}
+# Pie chart for 1990
+ggplot(pie_1990, aes(x = "", y = shares, fill = fct_inorder(source))) +
+  geom_col(width = 1, color = 1) +
+  geom_text(aes(label = paste0(shares, "%")),
+            position = position_stack(vjust = 0.5),
+            size=4,family="serif") +
+  coord_polar(theta = "y") +
+  labs(title="1990 Electricity Distribution in Japan")+
+  scale_fill_brewer(palette = "Pastel1")+
+guides(fill = guide_legend(title = "Sources")) +
+  theme_void()+
+  theme(axis.line = element_blank(),
+        axis.text = element_blank(),
+        axis.ticks = element_blank(),
+        plot.title = element_text(hjust = 0.5,vjust = -1),
+        text=element_text(family="serif"))+
+  theme(legend.text = element_text(family="serif",size = 10))+
+  theme(legend.title = element_text(family="serif",face = "bold",size=12))
+
+```
+
+## Plotting pie chart for 2018
+
+```{r, echo=FALSE}
+## Plotting pie chart for 2018
+ggplot(pie_2018, aes(x = "", y = shares, fill = fct_inorder(source))) +
+  geom_col(width = 1, color = 1) +
+  geom_text(aes(label = paste0(shares, "%")),
+            position = position_stack(vjust = 0.5),
+            size=4,family="serif") +
+  coord_polar(theta = "y") +
+  labs(title="2018 Electricity Distribution in Japan")+
+  scale_fill_brewer(palette = "Pastel1")+
+  guides(fill = guide_legend(title = "Sources")) +
+  theme_void()+
+  theme(axis.line = element_blank(),
+        axis.text = element_blank(),
+        axis.ticks = element_blank(),
+        plot.title = element_text(hjust = 0.5,vjust=-1),
+        text=element_text(family="serif"))+
+  theme(legend.text = element_text(family="serif",size = 10))+
+  theme(legend.title = element_text(family="serif",face = "bold",size=12))
+```
+
+
+# Percentage share of electricty from total energy sources (Germany)
+
+According to the German electricity source distribution graph, Germany also reduced its reliance on nuclear energy, and after 2015 wind has the second-highest share.
+
+
+```{r, echo=FALSE}
+### Sixth Analysis: % share of electricty from total energy sources (Germany)
+
+# Getting dataset
+German_electricity<-filter(plot_data,plot_data$country=="Germany")
+German_electricity<-select(German_electricity,country,year,coal_electricity,oil_electricity,gas_electricity,hydro_electricity,nuclear_electricity,wind_electricity,solar_electricity) 
+
+# Getting the % share of electricty from total energy sources
+German_electricity$row_sum=rowSums(German_electricity[,c(3:9)])
+German_electricity<-mutate(German_electricity,coal_share=(coal_electricity/row_sum)*100)
+German_electricity<-mutate(German_electricity,oil_share=(oil_electricity/row_sum)*100)
+German_electricity<-mutate(German_electricity,gas_share=(gas_electricity/row_sum)*100)
+German_electricity<-mutate(German_electricity,hydro_share=(hydro_electricity/row_sum)*100)
+German_electricity<-mutate(German_electricity,nuclear_share=(nuclear_electricity/row_sum)*100)
+German_electricity<-mutate(German_electricity,wind_share=(wind_electricity/row_sum)*100)
+German_electricity<-mutate(German_electricity,solar_share=(solar_electricity/row_sum)*100)
+
+# Selecting only related variables
+plot_elect2<-select(German_electricity,country,year,coal_share:solar_share)
+
+write_xlsx(plot_elect2,"/Users/mugekosar/Downloads/old.xlsx") #Extracting dataset into Excel
+German <- read_excel("/Users/mugekosar/Downloads/Germany.xlsx")  #After arranging dataset in Excel, importing into R
+
+## Line chart for German electricity source distributions over the years
+German %>% ggplot(aes(x = year, y = shares, color=source)) + 
+  geom_line(size=1) +
+  labs(title = "German electricity source distributions over the years",x="Year",y="Shares")+
+  theme_bw()+
+  theme(plot.title = element_text(hjust = 0.5))+
+  theme(
+    axis.title.x = element_text(family="serif",color = "black", size = 12, face = "bold"),
+    axis.title.y = element_text(family="serif",color = "black", size = 12, face = "bold"),
+    plot.title = element_text(family="serif",color="black", size=14, face="bold"),
+    text=element_text(family="serif"))+
+  theme(legend.text = element_text(family="serif",size = 10))+
+  theme(legend.title = element_text(family="serif",face = "bold",size=12))+
+  theme(legend.background = element_rect(colour = 1)) 
+```
+
+# Plotting pie chart for energy distribution and comparing 1990 Vs 2018 (Germany)
+
+For Germany in 1990 highest share in energy distribution is coal with 56.87% and second highest share is nuclear energy while lowest share in energy distribution is hydro with 3.2%. In 2018, pie chart shows that Germany changed its strategy for energy sources to renewable sources and wind energy became second primary energy source.
+
+
+```{r, echo=FALSE}
+### Seventh Analysis: Plotting pie chart for energy distribution and comparing 1990 Vs 2018 (Germany)
+
+# Sorting values greater than zero
+pie2<- German[,colSums(German!=0)>0]
+
+# Filtering only 1990 and 2018 years
+pie2<- pie2 %>%
+  filter(year==1990 |
+           year==2018)
+
+# Creating two different datasets
+pie2_1990<-filter(pie2,pie2$year==1990)
+pie2_1990[,'shares']=round(pie2_1990[,'shares'],2) #arranging values as two decimal
+pie2_2018<-filter(pie2,pie2$year==2018)
+pie2_2018[,'shares']=round(pie2_2018[,'shares'],2) #arranging values as two decimal
+
+
+## Plotting pie chart for 1990 
+
+# Filtering values greater than zero
+pie2_1990<-filter(pie2_1990,pie2_1990$shares>1) 
+```
+
+## Pie chart for 1990
+
+```{r, echo=FALSE}
+## Pie chart for 1990
+ggplot(pie2_1990, aes(x = "", y = shares, fill = fct_inorder(source))) +
+  geom_col(width = 1, color = 1) +
+  geom_text(aes(label = paste0(shares, "%")),
+            position = position_stack(vjust = 0.5),
+            size=4,family="serif") +
+  coord_polar(theta = "y") +
+  labs(title="1990 Electricity Distribution in Germany")+
+  scale_fill_brewer(palette = "Pastel1")+
+  guides(fill = guide_legend(title = "Sources")) +
+  theme_void()+
+  theme(axis.line = element_blank(),
+        axis.text = element_blank(),
+        axis.ticks = element_blank(),
+        plot.title = element_text(hjust = 0.5,vjust=-1),
+        text=element_text(family="serif"))+
+  theme(legend.text = element_text(family="serif",size = 10))+
+  theme(legend.title = element_text(family="serif",face = "bold",size=12))
+
+
+```
+
+## Pie chart for 2018
+
+```{r, echo=FALSE}
+ggplot(pie2_2018, aes(x = "", y = shares, fill = fct_inorder(source))) +
+  geom_col(width = 1, color = 1) +
+  geom_text(aes(label = paste0(shares, "%")),
+            position = position_stack(vjust = 0.5),
+            size=4,family="serif") +
+  coord_polar(theta = "y") +
+  labs(title="2018 Electricity Distribution in German") +
+  scale_fill_brewer(palette = "Pastel1")+
+  guides(fill = guide_legend(title = "Sources")) +
+  theme_void()+
+  theme(axis.line = element_blank(),
+        axis.text = element_blank(),
+        axis.ticks = element_blank(),
+        plot.title = element_text(hjust = 0.5,vjust=-1),
+        text=element_text(family="serif"))+
+  theme(legend.text = element_text(family="serif",size = 10))+
+  theme(legend.title = element_text(family="serif",face = "bold",size=12))
+
+```
+
+# Conclusion
+
+The findings from regression analysis show that not controlling for gas production created omitted variable bias which means it is correlated with population and coal production. 
+
+Overall, GDP-Population trends shows that the situation in Japan and Germany is highly concerning. They have no population increase and that means the ratio of young working population to old retired will be less in the near future. The GDP will be affected as the workforce decreases. Germany is welcoming more refugees to resolve this issue. Maybe Japan should find solutions to resolve this issue soon.
+Egypt is doing well in terms of GDP per capita increase which is 97.84%. Perhaps if the population increase was less, the impact will be more noticeable.
+
+Electricity source distribution analysis demonstrates that Japan decreased nuclear electricity usage after 2011 when happened Fukushima nuclear disaster-4 reactor buildings exploded. Thus, Japan changed its strategy for energy sources and became more reliant on coal and gas. (Chart 1-2)
+Germany is also affected from this disaster in Japan, so Germany also reduced its reliance on nuclear energy. The charts show that Germany also changed its strategy for energy sources to renewable sources.
